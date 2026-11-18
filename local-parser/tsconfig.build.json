@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rewriteRelativeImportExtensions": true,
+    "types": ["node"],
+    "strict": true,
+    "outDir": "dist",
+    "rootDir": "..",
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*.ts", "../src/imports/**/*.ts"],
+  "exclude": ["../src/imports/repository.ts", "../src/imports/localParserClient.ts", "../src/imports/csv.ts"]
+}

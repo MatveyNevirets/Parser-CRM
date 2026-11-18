@@ -1,0 +1,24 @@
+# Dependencies and build output
+node_modules/
+dist/
+local-parser/.test-output/
+*.tsbuildinfo
+
+# Local configuration
+.env
+.env.local
+.env.*.local
+
+# Supabase CLI state
+supabase/.temp/
+
+# Editor and OS files
+.idea/
+.vscode/
+!.vscode/
+.vscode/*
+!.vscode/tasks.json
+*.iml
+*.log
+*.swp
+.DS_Store

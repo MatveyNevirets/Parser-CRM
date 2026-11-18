@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": { "outDir": ".test-output" },
+  "include": ["src/**/*.ts", "tests/**/*.ts", "../src/imports/**/*.ts"],
+  "exclude": ["../src/imports/repository.ts", "../src/imports/localParserClient.ts", "../src/imports/csv.ts"]
+}

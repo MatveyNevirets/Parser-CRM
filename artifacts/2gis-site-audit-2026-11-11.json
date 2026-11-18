@@ -1,0 +1,107 @@
+{
+  "method": "Public 2GIS Contacts HTML; positive site evidence only. Unknown results were not accepted as absence. CRM records unchanged.",
+  "cards": [
+    {
+      "company": "Старт",
+      "sourceUrl": "https://2gis.ru/krasnodar/firm/70000001028060813",
+      "website": "http://startpanorama.ru/",
+      "websiteCheckStatus": "present",
+      "checkedAt": "2026-11-11T06:18:23.882Z"
+    },
+    {
+      "company": "Л-Вэй",
+      "sourceUrl": "https://2gis.ru/krasnodar/firm/3237490513164154",
+      "website": "http://l-way-center.ru/",
+      "websiteCheckStatus": "present",
+      "checkedAt": "2026-11-11T06:18:24.186Z"
+    },
+    {
+      "company": "Top class",
+      "sourceUrl": "https://2gis.ru/krasnodar/firm/70000001024781134",
+      "website": "http://topclass-education.ru/",
+      "websiteCheckStatus": "present",
+      "checkedAt": "2026-11-11T06:18:24.657Z"
+    },
+    {
+      "company": "Академия Детства",
+      "sourceUrl": "https://2gis.ru/krasnodar/firm/70000001077770095",
+      "website": null,
+      "websiteCheckStatus": "unknown",
+      "checkedAt": "2026-11-11T06:18:24.975Z",
+      "observedWebsiteCheckStatus": "absent",
+      "reason": "Single public HTML snapshot; no completed live-browser proof was issued."
+    },
+    {
+      "company": "Els Smart",
+      "sourceUrl": "https://2gis.ru/krasnodar/firm/70000001021272713",
+      "website": "http://els-smart.ru/",
+      "websiteCheckStatus": "present",
+      "checkedAt": "2026-11-11T06:18:25.298Z"
+    },
+    {
+      "company": "Яркие дети",
+      "sourceUrl": "https://2gis.ru/krasnodar/firm/70000001094125619",
+      "website": "http://krasnodar.yarkiedeti.ru/",
+      "websiteCheckStatus": "present",
+      "checkedAt": "2026-11-11T06:18:25.700Z"
+    },
+    {
+      "company": "Академики",
+      "sourceUrl": "https://2gis.ru/krasnodar/firm/70000001103873743",
+      "website": "http://xn--80aamepajeq.com/",
+      "websiteCheckStatus": "present",
+      "checkedAt": "2026-11-11T06:18:26.011Z"
+    },
+    {
+      "company": "Lingva school",
+      "sourceUrl": "https://2gis.ru/krasnodar/firm/70000001021543731",
+      "website": null,
+      "websiteCheckStatus": "unknown",
+      "checkedAt": "2026-11-11T06:18:26.302Z",
+      "observedWebsiteCheckStatus": "absent",
+      "reason": "Single public HTML snapshot; no completed live-browser proof was issued."
+    },
+    {
+      "company": "Репетитор Кубани",
+      "sourceUrl": "https://2gis.ru/krasnodar/firm/3237490513555675",
+      "website": "http://repetitor-kubani.ru/",
+      "websiteCheckStatus": "present",
+      "checkedAt": "2026-11-11T06:18:26.649Z"
+    },
+    {
+      "company": "Достояние",
+      "sourceUrl": "https://2gis.ru/krasnodar/firm/70000001059685253",
+      "website": "http://xn----7sbneoihteea9an9ezf.xn--p1ai/",
+      "websiteCheckStatus": "present",
+      "checkedAt": "2026-11-11T06:18:26.966Z"
+    },
+    {
+      "company": "DreamLand",
+      "sourceUrl": "https://2gis.ru/krasnodar/firm/70000001060356837",
+      "website": "http://taplink.cc/dreamland.krasnodar",
+      "websiteCheckStatus": "present",
+      "checkedAt": "2026-11-11T06:18:27.261Z"
+    },
+    {
+      "company": "Учи-ручка",
+      "sourceUrl": "https://2gis.ru/krasnodar/firm/70000001078812550",
+      "website": "http://prodlenka-uchi.ru/",
+      "websiteCheckStatus": "present",
+      "checkedAt": "2026-11-11T06:18:27.659Z"
+    },
+    {
+      "company": "Happy Faces",
+      "sourceUrl": "https://2gis.ru/krasnodar/firm/70000001117227028",
+      "website": "http://happyfaces.lol/",
+      "websiteCheckStatus": "present",
+      "checkedAt": "2026-11-11T06:18:27.879Z"
+    },
+    {
+      "company": "Новая школа",
+      "sourceUrl": "https://2gis.ru/krasnodar/firm/70000001039468997",
+      "website": "http://royal-academy.ru/",
+      "websiteCheckStatus": "present",
+      "checkedAt": "2026-11-11T06:18:28.200Z"
+    }
+  ]
+}

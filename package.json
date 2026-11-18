@@ -1,0 +1,29 @@
+{
+  "name": "pahota-crm-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:connected": "node scripts/dev-with-local-parser.mjs",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "parser:local": "npm --prefix local-parser start",
+    "typecheck": "tsc -b --pretty false",
+    "test": "node --test tests/imports.test.mjs tests/publication.test.mjs && npm --prefix local-parser test && node --test tests/local-parser-api.test.mjs && node tests/parser.browser.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.76.1",
+    "lucide-react": "^0.468.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
+    "@types/react": "^19.1.16",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.4",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.7"
+  }
+}

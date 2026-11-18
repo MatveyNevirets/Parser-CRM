@@ -1,0 +1,22 @@
+{
+  "name": "pahota-local-parser",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "start": "npm run build && node dist/local-parser/src/server.js",
+    "check": "tsc --noEmit --project tsconfig.json",
+    "install:browser": "playwright install chromium",
+    "test": "tsc --project tsconfig.test.json && node --test --test-concurrency=1 .test-output/local-parser/tests/store.test.js .test-output/local-parser/tests/security.test.js .test-output/local-parser/tests/twoGis.test.js"
+  },
+  "dependencies": {
+    "pahota-crm-web": "file:..",
+    "playwright": "^1.59.0",
+    "sql.js": "^1.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "@types/sql.js": "^1.4.9",
+    "typescript": "^5.9.3"
+  }
+}
