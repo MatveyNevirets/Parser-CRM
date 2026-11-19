@@ -65,6 +65,19 @@ leads[2].priority = 'high'
 leads[3].yandex_maps_url = 'https://yandex.ru/maps/org/1234'
 const calls = []
 const outreach = []
+const employeeId = '00000000-0000-4000-8000-000000000003'
+const employeeLogin = 'employee@example.test'
+const earnings = []
+const activityCorrections = []
+let workspaceOwner = userId
+let reconciliation = null
+const analyticsToday = '2024-02-29'
+const periodTotals = (value) => ({ day: value, week: value, month: value, year: value, total: value })
+const analytics = (messages, payments) => ({
+  today: analyticsToday, week_start: '2024-02-26', zone: 'Europe/Volgograd',
+  counts: periodTotals(messages), daily: { [analyticsToday]: messages }, hourly: { 10: messages },
+  earnings: payments === null ? null : { ...periodTotals(payments), daily: { [analyticsToday]: payments } },
+})
 const recordings = new Map()
 const counts = { workspace: 0, leads: 0, writes: 0 }
 await context.route('https://crm-regression.supabase.co/**', async (route) => {
@@ -77,7 +90,7 @@ await context.route('https://crm-regression.supabase.co/**', async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 80))
     body = { workspace_id: workspaceId }
   } else if (url.pathname.endsWith('/workspaces')) {
-    body = { id: workspaceId, name: 'Regression Team', invite_code: 'test', owner_id: userId }
+    body = { id: workspaceId, name: 'Regression Team', invite_code: 'test', owner_id: workspaceOwner }
   } else if (url.pathname.endsWith('/leads')) {
     if (request.method() === 'PATCH') {
       counts.writes++
@@ -119,6 +132,61 @@ await context.route('https://crm-regression.supabase.co/**', async (route) => {
     Object.assign(row, { status: 'inProgress', version: row.version + 1 })
     outreach.push({ id: data.p_id, lead_id: data.p_lead_id, kind: 'telegram_message', occurred_at: new Date().toISOString() })
     body = null
+  } else if (url.pathname.endsWith('/rpc/crm_employee_activity')) {
+    const target = request.postDataJSON().p_user_id
+    const mine = target === userId
+    const adjustment = activityCorrections.filter((item) => item.user_id === target).reduce((sum, item) => sum + item.delta, 0)
+    body = { ...analytics((mine ? outreach.length : 2) + adjustment, earnings.filter((item) => item.user_id === target)
+      .reduce((sum, item) => sum + item.amount_kopecks, 0)), profile: {
+      id: target, login: mine ? session.user.email : employeeLogin, created_at: '2020-01-01T00:00:00Z',
+      is_admin: target === workspaceOwner,
+    } }
+  } else if (url.pathname.endsWith('/rpc/crm_team_activity')) {
+    body = { ...analytics(outreach.length, workspaceOwner === userId
+      ? earnings.reduce((sum, item) => sum + item.amount_kopecks, 0) : null), reconciliation }
+    body.daily['2024-02-28'] = 39
+    for (const key of ['week', 'month', 'year', 'total']) body.counts[key] += 39
+  } else if (url.pathname.endsWith('/rpc/crm_team_members')) {
+    body = [{ id: userId, login: session.user.email, today: outreach.length, total: outreach.length, earnings: 0, last_activity: null },
+      { id: employeeId, login: employeeLogin, today: 2, total: 2, earnings: earnings.reduce((sum, item) => sum + item.amount_kopecks, 0),
+        last_activity: '2024-02-29T07:00:00Z' }]
+  } else if (url.pathname.endsWith('/rpc/crm_mailing_leaderboard')) {
+    assert.equal(workspaceOwner, userId)
+    const { p_on: day, p_period: period } = request.postDataJSON()
+    const employeeDaily = { '2024-02-28': 39,
+      [analyticsToday]: activityCorrections.filter((item) => item.user_id === employeeId).reduce((sum, item) => sum + item.delta, 0) }
+    const ownerDaily = { [analyticsToday]: outreach.length }
+    const start = period === 'week' ? '2024-02-26' : period === 'month' ? '2024-02-01' : day
+    const end = period === 'week' ? '2024-03-03' : period === 'month' ? analyticsToday : day
+    const members = [[employeeId, employeeLogin, employeeDaily], [userId, session.user.email, ownerDaily]].map(([id, login, daily]) => {
+      const selected = Object.fromEntries(Object.entries(daily).filter(([date]) => date >= start && date <= end))
+      return { id, login, daily: selected, total: Object.values(selected).reduce((sum, value) => sum + value, 0) }
+    }).sort((a, b) => b.total - a.total).map((member, index) => ({ ...member, position: index + 1 }))
+    body = { start, end, members }
+  } else if (url.pathname.endsWith('/rpc/crm_activity_correction_history')) {
+    body = activityCorrections.filter((item) => item.user_id === request.postDataJSON().p_user_id)
+  } else if (url.pathname.endsWith('/rpc/crm_add_daily_activity_correction')) {
+    const params = request.postDataJSON()
+    assert.equal(params.p_date, '2024-02-29')
+    activityCorrections.push({ id: params.p_id, user_id: params.p_user_id, hour_start: '2024-02-28T21:00:00Z',
+      delta: params.p_delta, reason: params.p_reason })
+    body = null
+  } else if (url.pathname.endsWith('/rpc/crm_earnings_history')) {
+    body = earnings.filter((item) => item.user_id === request.postDataJSON().p_user_id)
+  } else if (url.pathname.endsWith('/rpc/crm_save_earning')) {
+    const params = request.postDataJSON()
+    const prior = earnings.find((item) => item.id === params.p_id)
+    const entry = { id: params.p_id, user_id: params.p_user_id, amount_kopecks: params.p_amount_kopecks,
+      earned_on: params.p_earned_on, comment: params.p_comment, lead_id: params.p_lead_id,
+      company_name: params.p_lead_id ? 'Alpha' : null, version: prior ? prior.version + 1 : 1 }
+    if (prior) Object.assign(prior, entry)
+    else earnings.push(entry)
+    body = null
+  } else if (url.pathname.endsWith('/rpc/crm_reconcile_mailing')) {
+    const params = request.postDataJSON()
+    assert.equal(params.p_cutoff, '2024-02-28T12:00')
+    if (params.p_expected_recorded !== null) reconciliation = { additional: 16, cutoff: '2024-02-28T09:00:00Z' }
+    body = { recorded: 39, additional: 16, applied: reconciliation !== null }
   } else if (url.pathname.endsWith('/rpc/crm_sales_statistics')) {
     const active = leads.filter((lead) => !lead.archived_at)
     const queue = active.filter((lead) => lead.manually_queued_for_calls || (lead.status === 'waiting' && !lead.excluded_from_automatic_calls))
@@ -346,12 +414,12 @@ async function salesWorkflows() {
   await confirm.getByRole('button', { name: 'Убрать в архив' }).click()
   await rows(['Beta', 'Gamma', 'Delta', 'Epsilon'])
   await page.getByRole('button', { name: 'Статистика', exact: true }).click()
-  for (const [label, expected] of [['Всего', '5'], ['Рассылка', '1'], ['Лиды, которым написали', '39'],
+  for (const [label, expected] of [['Всего', '5'], ['Рассылка', '1'],
     ['Отправлено офферов', '0'], ['Звонки с результатом', '2']]) {
     const card = page.locator('.stat-card').filter({ hasText: label })
     await card.getByText(expected, { exact: true }).waitFor()
   }
-  for (const label of ['В архиве', 'Заинтересованные лиды', 'В статусе «Отложен»', 'Отказ / скрыто']) {
+  for (const label of ['В архиве', 'Заинтересованные лиды', 'В статусе «Отложен»', 'Отказ / скрыто', 'Лиды, которым написали']) {
     assert.equal(await page.locator('.stat-card').getByText(label, { exact: true }).count(), 0)
   }
   await page.getByRole('button', { name: 'Архив', exact: true }).click()
@@ -387,6 +455,90 @@ async function salesWorkflows() {
   await showMailing()
   await rows(['Alpha', 'Beta', 'Epsilon'])
   console.log('PASS: Telegram links, legacy status, queues, archive, statistics, recording, uploads, playback, download and reload')
+}
+
+async function employeeAnalytics() {
+  await page.getByRole('button', { name: 'Личный кабинет' }).click()
+  await page.getByRole('heading', { name: session.user.email }).waitFor()
+  assert.equal(await page.getByRole('button', { name: 'Изменить статистику' }).count(), 0)
+  await page.getByRole('region', { name: 'Указанный общий итог рассылок' }).getByText('56', { exact: true }).waitFor()
+  const calendar = page.getByRole('group', { name: '365 дней активности' })
+  assert.equal(await calendar.getByRole('button').count(), 365)
+  await calendar.getByRole('button', { name: /29 февраля 2024.*1 рассылка/ }).click()
+  const chart = page.getByRole('region', { name: 'Динамика рассылок' })
+  for (const [period, size] of [['День', 24], ['Неделя', 7], ['Месяц', 29], ['Год', 12]]) {
+    await chart.getByRole('button', { name: period, exact: true }).click()
+    assert.equal(await chart.locator('.activity-bars button').count(), size)
+  }
+  await page.setViewportSize({ width: 390, height: 844 })
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true)
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.getByRole('button', { name: 'Пользователи', exact: true }).click()
+  await page.getByLabel('Поиск сотрудника').fill('employee')
+  await page.getByRole('button', { name: employeeLogin, exact: true }).click()
+  await page.getByRole('heading', { name: employeeLogin }).waitFor()
+  await page.getByRole('button', { name: 'Изменить статистику' }).click()
+  assert.equal(await page.getByLabel('Причина корректировки').count(), 0)
+  assert.equal(await page.getByLabel('Час рассылок').count(), 0)
+  await page.getByLabel('Количество рассылок').fill('3')
+  await page.getByRole('button', { name: 'Сохранить корректировку' }).click()
+  await page.getByRole('cell', { name: '+3', exact: true }).waitFor()
+  await page.locator('.period-totals > div').filter({ hasText: 'Лично за всё время' }).getByText('5', { exact: true }).waitFor()
+  await page.getByLabel('Действие', { exact: true }).selectOption({ label: 'Отнять' })
+  await page.getByLabel('Количество рассылок').fill('1')
+  await page.getByRole('button', { name: 'Сохранить корректировку' }).click()
+  await page.getByRole('cell', { name: '-1', exact: true }).waitFor()
+  await page.locator('.period-totals > div').filter({ hasText: 'Лично за всё время' }).getByText('4', { exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Добавить начисление' }).click()
+  await page.getByLabel('Сумма в рублях').fill('120,75')
+  await page.getByLabel('Комментарий или источник').fill('Оплата работы')
+  await page.getByLabel('Связанный лид').selectOption('1')
+  await page.getByRole('button', { name: 'Сохранить начисление' }).click()
+  await page.getByText('Оплата работы', { exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Редактировать начисление' }).click()
+  await page.getByLabel('Сумма в рублях').fill('145')
+  await page.getByRole('button', { name: 'Сохранить начисление' }).click()
+  await page.waitForFunction(() => document.querySelector('.analytics-money')?.textContent?.includes('145'))
+  assert.equal(earnings.length, 1)
+  await page.getByLabel('Сотрудник', { exact: true }).selectOption(userId)
+  await page.getByRole('heading', { name: session.user.email }).waitFor()
+  await page.getByRole('button', { name: 'Статистика', exact: true }).click()
+  await page.getByRole('region', { name: 'Указанный общий итог рассылок' }).getByText('56', { exact: true }).waitFor()
+  await page.getByRole('heading', { name: 'Заработано командой' }).waitFor()
+  const board = page.getByRole('region', { name: 'Лидерборд рассылок' })
+  const employeeRow = board.getByRole('row').filter({ hasText: employeeLogin })
+  await employeeRow.getByRole('cell', { name: '41', exact: true }).waitFor()
+  assert.equal(await employeeRow.getByRole('cell', { name: '39', exact: true }).count(), 1)
+  assert.equal(await employeeRow.getByRole('cell', { name: '2', exact: true }).count(), 1)
+  const boardPeriods = board.getByRole('group', { name: 'Период лидерборда' })
+  await boardPeriods.getByRole('button', { name: 'День', exact: true }).click()
+  await employeeRow.getByRole('cell', { name: '2', exact: true }).waitFor()
+  await board.getByLabel('Дата лидерборда').fill('2024-02-28')
+  await employeeRow.getByRole('cell', { name: '39', exact: true }).waitFor()
+  await boardPeriods.getByRole('button', { name: 'Месяц', exact: true }).click()
+  await employeeRow.getByRole('cell', { name: '41', exact: true }).waitFor()
+  await page.setViewportSize({ width: 390, height: 844 })
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true)
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.getByText('Историческая сверка рассылок', { exact: true }).click()
+  await page.getByLabel('Дата и время сверки').fill('2024-02-28T12:00')
+  await page.getByRole('button', { name: 'Проверить события' }).click()
+  await page.getByRole('button', { name: 'Подтвердить сверку до 55' }).click()
+  await page.getByText(/Историческая сверка сохранена/).waitFor()
+  await page.getByRole('region', { name: 'Рассылки команды' }).getByText('56', { exact: true }).waitFor()
+  workspaceOwner = employeeId
+  await page.reload()
+  await page.getByRole('button', { name: 'Личный кабинет' }).click()
+  await page.getByRole('heading', { name: session.user.email }).waitFor()
+  assert.equal(await page.getByRole('button', { name: 'Пользователи', exact: true }).count(), 0)
+  assert.equal(await page.getByRole('button', { name: 'Добавить начисление' }).count(), 0)
+  assert.equal(await page.getByRole('button', { name: 'Изменить статистику' }).count(), 0)
+  await page.getByRole('button', { name: 'Статистика', exact: true }).click()
+  await page.getByRole('heading', { name: 'Активность команды' }).waitFor()
+  await page.getByText(/исторических отправок без дат и авторов/).waitFor()
+  assert.equal(await page.getByRole('heading', { name: 'Заработано командой' }).count(), 0)
+  assert.equal(await page.getByRole('heading', { name: 'Лидерборд рассылок' }).count(), 0)
+  console.log('PASS: employee and owner analytics, leap-day calendar, chart periods, earnings editor and historical review')
 }
 try {
   await page.goto(baseURL)
@@ -494,7 +646,7 @@ try {
     await page.getByRole('heading', { name: 'Обзор', exact: true }).waitFor()
     await lifecycle()
     assert.equal(await page.getByRole('heading', { name: 'Обзор', exact: true }).count(), 1)
-    if (!headed) await salesWorkflows()
+    if (!headed) { await salesWorkflows(); await employeeAnalytics() }
     await page.getByTitle('Выйти', { exact: true }).click()
     await page.getByRole('button', { name: 'Войти', exact: true }).waitFor()
     console.log('PASS: filters, offer PATCH/reload/details, draft/card/section preservation, token refresh, sign-out')

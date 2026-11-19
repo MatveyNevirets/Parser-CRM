@@ -1,13 +1,16 @@
 import { useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { Archive, BarChart3, BriefcaseBusiness, Building2, CircleGauge, Cloud, Copy, Leaf, LogOut, Map, Menu, UsersRound, X } from 'lucide-react'
+import { Archive, BarChart3, BriefcaseBusiness, Building2, CircleGauge, Cloud, Copy, Leaf, LogOut, Map, Menu, UserRound, UsersRound, X } from 'lucide-react'
 import type { Workspace } from '../types'
 import { useLeads } from '../hooks/useLeads'
 import { LeadsPage } from './LeadsPage'
 import { ParserPage } from './ParserPage'
 import { StatisticsPage } from './StatisticsPage'
+import { EmployeePage } from './EmployeePage'
+import { TeamMembersPage } from './TeamMembersPage'
+import { useActivityRevision } from '../hooks/useAnalytics'
 
-type Section = 'overview' | 'leads' | 'parser' | 'statistics' | 'archive'
+type Section = 'overview' | 'leads' | 'parser' | 'statistics' | 'archive' | 'employee' | 'members'
 
 export function Dashboard({ client, workspace, email, userId, onSignOut }: {
   client: SupabaseClient; workspace: Workspace; email: string; userId: string; onSignOut: () => void
@@ -16,6 +19,8 @@ export function Dashboard({ client, workspace, email, userId, onSignOut }: {
   const [teamOpen, setTeamOpen] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
   const leadsState = useLeads(client, workspace.id)
+  const revision = useActivityRevision(client, workspace.id)
+  const admin = workspace.owner_id === userId
   const choose = (next: Section) => { setSection(next); setMobileNav(false) }
 
   return <div className="app-shell">
@@ -31,6 +36,8 @@ export function Dashboard({ client, workspace, email, userId, onSignOut }: {
         </button>
         <button className={section === 'statistics' ? 'active' : ''} onClick={() => choose('statistics')}><BarChart3 /> <span>Статистика</span></button>
         <button className={section === 'archive' ? 'active' : ''} onClick={() => choose('archive')}><Archive /> <span>Архив</span></button>
+        <button className={section === 'employee' ? 'active' : ''} onClick={() => choose('employee')}><UserRound /> <span>Личный кабинет</span></button>
+        {admin && <button className={section === 'members' ? 'active' : ''} onClick={() => choose('members')}><UsersRound /> <span>Пользователи</span></button>}
       </nav>
       <div className="sidebar-status"><Cloud /><div><strong>Общая база</strong><span>{leadsState.realtimeConnected ? 'Синхронизация включена' : 'Подключение…'}</span></div></div>
     </aside>
@@ -50,8 +57,12 @@ export function Dashboard({ client, workspace, email, userId, onSignOut }: {
         {section === 'leads' && <LeadsPage client={client} {...leadsState} />}
         {section === 'archive' && <LeadsPage client={client} {...leadsState} archive />}
         {section === 'parser' && <ParserPage client={client} workspaceId={workspace.id} userId={userId} />}
-        {section === 'statistics' && <StatisticsPage client={client} workspaceId={workspace.id}
+        {section === 'statistics' && <StatisticsPage client={client} workspaceId={workspace.id} revision={revision} admin={admin}
           totalLeads={leadsState.loading || leadsState.error ? null : leadsState.leads.length} />}
+        {section === 'employee' && <EmployeePage client={client} workspaceId={workspace.id} userId={userId}
+          revision={revision} admin={admin} leads={leadsState.leads} />}
+        {section === 'members' && admin && <TeamMembersPage client={client} workspaceId={workspace.id}
+          revision={revision} leads={leadsState.leads} />}
         {section === 'overview' && <Overview leads={leadsState.leads.filter((lead) => !lead.archived_at)}
           loading={leadsState.loading} onOpenLeads={() => setSection('leads')} />}
       </main>

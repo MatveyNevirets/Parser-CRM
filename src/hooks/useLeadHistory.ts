@@ -16,7 +16,7 @@ export function useLeadHistory<T extends { id: string }>(
   useEffect(() => {
     let active = true
     const from = page * pageSize
-    void withTimeout(client.from(table).select('*').eq('lead_id', leadId)
+    void withTimeout(client.from(table).select(table === 'lead_outreach' ? 'id,kind,occurred_at' : '*').eq('lead_id', leadId)
       .order('occurred_at', { ascending: false }).order('id').range(from, from + pageSize))
       .then(({ data, error: failure }) => {
         if (failure) throw failure

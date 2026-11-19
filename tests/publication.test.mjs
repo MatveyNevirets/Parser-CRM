@@ -12,7 +12,7 @@ const bootstrap = (db) => db.exec(`
   create role anon;
   create role authenticated;
   create schema auth;
-  create table auth.users (id uuid primary key);
+  create table auth.users (id uuid primary key, email text, phone text, created_at timestamptz default now());
   create function auth.uid() returns uuid language sql stable as $$
     select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
   $$;
@@ -138,6 +138,156 @@ test('parser publication and sales workflows in PostgreSQL', async (t) => {
         await db.exec('reset role')
         await setActor(userId)
       }
+    })
+
+    await t.test('analytics isolate employees, reconcile exactly 55, and protect earnings', async () => {
+      const owner = randomUUID()
+      const employee = randomUUID()
+      const foreign = randomUUID()
+      const team = randomUUID()
+      const lead = randomUUID()
+      const secondLead = randomUUID()
+      const earning = randomUUID()
+      const setActor = (actor) => db.query("select set_config('request.jwt.claim.sub', $1, false)", [actor])
+      for (const [id, email] of [[owner, 'owner@example.test'], [employee, 'employee@example.test'], [foreign, 'other@example.test']]) {
+        await db.query('insert into auth.users(id,email) values ($1,$2)', [id,email])
+      }
+      await db.query("insert into public.workspaces(id, name, owner_id) values ($1, 'Аналитика', $2)", [team, owner])
+      await db.query('insert into public.workspace_members(workspace_id,user_id) values ($1,$2),($1,$3)', [team, owner, employee])
+      await setActor(owner)
+      await db.query("insert into public.leads(id,workspace_id,company_name,niche) values ($1,$3,'Лид 1','Кафе'),($2,$3,'Лид 2','Кафе')",
+        [lead, secondLead, team])
+      const { rows: [clock] } = await db.query(
+        "select ((now() at time zone 'Europe/Volgograd')::date - 1)::text || 'T12:00:00' as cutoff, (now() at time zone 'Europe/Volgograd')::date::text as today",
+      )
+      const seed = (count) => db.query(
+        "insert into public.lead_outreach(id,workspace_id,lead_id,created_by,kind,occurred_at) select gen_random_uuid(), $1,$2,$3,'telegram_message', ($4::timestamp at time zone 'Europe/Volgograd') - interval '1 hour' from generate_series(1,$5::integer)",
+        [team, lead, employee, clock.cutoff, count],
+      )
+      await seed(39)
+      const one = async (sql, params) => (await db.query(sql, params)).rows[0].value
+      const personal = (id) => one('select public.crm_employee_activity($1,$2) value', [team,id])
+      const shared = () => one('select public.crm_team_activity($1) value', [team])
+      const members = () => one('select public.crm_team_members($1) value', [team])
+      const leaderboard = (date, period) => one('select public.crm_mailing_leaderboard($1,$2,$3) value', [team, date, period])
+      const reconcile = (recorded) => one('select public.crm_reconcile_mailing($1,$2,$3) value', [team, clock.cutoff, recorded])
+      const save = (amount, version) => db.query(
+        'select public.crm_save_earning($1,$2,$3,$4,$5,$6,$7,$8)',
+        [team, employee, earning, version, amount, clock.today, 'Работа по лиду', lead],
+      )
+      const correct = (id, delta) => db.query(
+        "select public.crm_add_activity_correction($1,$2,$3,$4::timestamp - interval '1 hour',$5,'Сверка с журналом')",
+        [team, employee, id, clock.cutoff, delta],
+      )
+      await db.exec('set role authenticated')
+      try {
+        await setActor(employee)
+        assert.equal((await personal(employee)).counts.total, 39)
+        assert.equal((await personal(employee)).earnings.total, 0)
+        assert.equal((await shared()).earnings, null)
+        await assert.rejects(() => personal(owner), /администратору/)
+        await assert.rejects(() => members(), /администратору/)
+        await assert.rejects(() => leaderboard(clock.today, 'week'), /администратору/)
+        await assert.rejects(() => reconcile(39), /администратору/)
+        await assert.rejects(() => save(10550, null), /администратору/)
+        await assert.rejects(() => correct(randomUUID(), 3), /администратору/)
+        await assert.rejects(() => db.query('select * from public.crm_activity_correction_history($1,$2)', [team,employee]), /администратору/)
+        await assert.rejects(() => db.query('select public.crm_earnings_history($1,$2)', [team, owner]), /администратору/)
+        await assert.rejects(() => db.query('select created_by from public.lead_outreach where lead_id=$1', [lead]), /permission denied/)
+        assert.equal((await db.query('select id,kind,occurred_at from public.lead_outreach where lead_id=$1', [lead])).rows.length, 39)
+        await setActor(owner)
+        await assert.rejects(() => db.query(
+          "select public.crm_reconcile_mailing($1,$2::timestamp - interval '1 day',0)", [team, clock.cutoff],
+        ), /Укажите источник/)
+        assert.deepEqual(await reconcile(null), { recorded: 39, additional: 16, applied: false })
+        assert.equal((await shared()).reconciliation, null)
+        await assert.rejects(() => reconcile(40), /изменилось/)
+        assert.deepEqual(await reconcile(39), { recorded: 39, additional: 16, applied: true })
+        await reconcile(39)
+        const first = await shared()
+        assert.equal(first.counts.total + first.reconciliation.additional, 55)
+        assert.equal(first.counts.day, 0)
+        assert.equal(Object.values(first.daily).reduce((sum, v) => sum + v, 0), 39)
+        await save(10550, null)
+        await save(10550, null)
+        await save(12075, 1)
+        await assert.rejects(() => save(10000, 1), /изменилось/)
+        assert.equal((await personal(employee)).earnings.day, 12075)
+        assert.equal((await shared()).earnings.total, 12075)
+        assert.equal((await members()).find((person) => person.id === employee).earnings, 12075)
+        assert.equal((await db.query('select * from public.crm_earnings_history($1,$2)', [team,employee])).rows.length, 1)
+        const message = randomUUID()
+        await db.query('select public.mark_mailing_message($1,$2,1)', [secondLead,message])
+        await db.query('select public.mark_mailing_message($1,$2,1)', [secondLead,message])
+        const updated = await shared()
+        assert.equal(updated.counts.total + updated.reconciliation.additional, 56)
+        assert.equal(updated.counts.day, 1)
+        assert.equal(Object.values(updated.hourly).reduce((sum, v) => sum + v, 0), 1)
+        assert.equal((await personal(owner)).counts.total, 1)
+        assert.equal((await personal(employee)).counts.total, 39)
+        await db.exec('reset role')
+        await seed(1)
+        await db.exec('set role authenticated')
+        const recovered = await shared()
+        assert.equal(recovered.reconciliation.additional, 15)
+        assert.equal(recovered.counts.total + recovered.reconciliation.additional, 56)
+        assert.equal((await db.query('select workspace_id from public.crm_activity_updates where workspace_id=$1', [team])).rows.length, 1)
+        await setActor(foreign)
+        await assert.rejects(() => shared(), /Нет доступа/)
+        assert.deepEqual((await db.query('select workspace_id from public.crm_activity_updates where workspace_id=$1', [team])).rows, [])
+        await db.close()
+        db = new PGlite(directory)
+        await setActor(owner)
+        await db.exec('set role authenticated')
+        assert.equal((await shared()).reconciliation.additional, 15)
+        assert.equal((await personal(employee)).earnings.total, 12075)
+        const correction = randomUUID()
+        const priorDay = clock.cutoff.slice(0, 10)
+        await correct(correction, 3)
+        await correct(correction, 3)
+        await assert.rejects(() => correct(correction, 4), /другими данными/)
+        const corrected = await personal(employee)
+        assert.equal(corrected.counts.total, 43)
+        assert.equal(corrected.daily[priorDay], 43)
+        assert.equal((await members()).find((person) => person.id === employee).total, 43)
+        assert.equal((await shared()).reconciliation.additional, 12)
+        assert.equal((await db.query('select id from public.lead_outreach where lead_id = $1', [lead])).rows.length, 40)
+        await assert.rejects(() => correct(randomUUID(), -44), /не может быть отрицательным/)
+        await correct(randomUUID(), -3)
+        assert.equal((await personal(employee)).counts.total, 40)
+        assert.equal((await db.query('select * from public.crm_activity_correction_history($1,$2)', [team,employee])).rows.length, 2)
+        const daily = (user, id, date, delta) => db.query(
+          'select public.crm_add_daily_activity_correction($1,$2,$3,$4,$5)', [team,user,id,date,delta],
+        )
+        const dailyId = randomUUID()
+        await daily(employee, dailyId, clock.today, 3)
+        await daily(employee, dailyId, clock.today, 3)
+        const employeeDay = await personal(employee)
+        assert.equal(employeeDay.counts.day, 3)
+        assert.equal(employeeDay.daily[clock.today], 3)
+        assert.deepEqual(employeeDay.hourly, {})
+        await daily(employee, randomUUID(), priorDay, -2)
+        assert.equal((await personal(employee)).daily[priorDay], 38)
+        const dailyLeaders = await leaderboard(priorDay, 'day')
+        assert.equal(dailyLeaders.start, priorDay)
+        assert.equal(dailyLeaders.end, priorDay)
+        assert.deepEqual(dailyLeaders.members.map(({ id, position, total }) => ({ id, position, total })),
+          [{ id: employee, position: 1, total: 38 }, { id: owner, position: 2, total: 0 }])
+        assert.deepEqual(dailyLeaders.members[0].daily, { [priorDay]: 38 })
+        const weeklyLeaders = await leaderboard(priorDay, 'week')
+        assert.equal(new Date(`${weeklyLeaders.start}T00:00:00Z`).getUTCDay(), 1)
+        assert.equal(weeklyLeaders.members[0].daily[priorDay], 38)
+        assert.equal((await leaderboard(priorDay, 'month')).start, `${priorDay.slice(0, 7)}-01`)
+        await assert.rejects(() => leaderboard(clock.today, 'year'), /Выберите день/)
+        await assert.rejects(() => db.query('select public.crm_mailing_leaderboard($1,$2::date + 1,$3)', [team, clock.today, 'day']),
+          /Выберите день/)
+        await assert.rejects(() => daily(employee, randomUUID(), priorDay, -39), /день не может быть отрицательным/)
+        await setActor(employee)
+        await assert.rejects(() => daily(employee, randomUUID(), clock.today, 1), /администратору/)
+        await setActor(owner)
+        await save(0, 2)
+        assert.equal((await personal(employee)).earnings.total, 0)
+      } finally { await db.exec('reset role'); await setActor(userId) }
     })
 
     await t.test('mailing message moves the lead once and preserves history on retry', async () => {
@@ -351,9 +501,11 @@ test('parser publication and sales workflows in PostgreSQL', async (t) => {
       differentAudio[differentAudio.length - 1] = 1
       await assert.rejects(() => attach(differentAudio.toString('base64')), /уже прикреплена/)
       const messageId = randomUUID()
+      await db.exec('reset role')
       for (const [id, kind] of [[messageId, 'telegram_message'], [messageId, 'telegram_message'], [randomUUID(), 'telegram_offer']]) {
         await db.query('select public.log_lead_outreach($1,$2,$3)', [manual, id, kind])
       }
+      await db.exec('set role authenticated')
       assert.deepEqual(await stats(), { total: 1, mailing: 1, calls_queue: 1, archived: 1,
         rejected_or_hidden: 2, messaged: 1, offers: 1, waiting: 0, calls_made: 3, interested: 1 })
       await db.close()

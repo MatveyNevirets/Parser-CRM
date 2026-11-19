@@ -367,3 +367,68 @@ a.button:focus-visible { outline: 3px solid rgba(49,92,75,.25); outline-offset: 
   .lead-tabs svg { display: none; }
   .call-modal .field input, .call-modal .field select { min-width: 0; width: 100%; }
 }
+
+.analytics-stack { display: grid; gap: 16px; min-width: 0; }
+.team-activity-stack { margin-top: 16px; }
+.analytics-panel { min-width: 0; background: #fff; border: 1px solid #e3ebe5; border-radius: 18px; padding: clamp(16px, 2.5vw, 25px); }
+.analytics-panel h2, .analytics-panel h3, .analytics-panel p { margin-top: 0; }
+.analytics-panel h3 { font-size: 16px; margin-bottom: 12px; }
+.analytics-panel summary { cursor: pointer; color: #315c4b; font-weight: 700; }
+.analytics-panel summary + p { margin-top: 12px; }
+.analytics-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.analytics-heading h3 { margin: 0; }
+.analytics-meta { color: #66746e; font-size: 13px; }
+.employee-profile, .employee-switch { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.employee-profile h2 { font-size: clamp(18px, 3vw, 24px); margin-bottom: 4px; overflow-wrap: anywhere; }
+.employee-profile p { color: #66746e; font-size: 13px; margin-bottom: 0; }
+.employee-profile > div:last-child { min-width: 0; }
+.employee-icon { display: grid; flex: 0 0 44px; height: 44px; place-items: center; color: #315c4b; background: #e7f2eb; border-radius: 12px; }
+.period-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 8px; margin: 12px 0 0; }
+.period-totals > div { min-width: 0; padding: 10px 12px; border: 1px solid #e6ede8; border-radius: 10px; background: #f6f9f7; }
+.period-totals dt { font-size: 12px; color: #596d62; }
+.period-totals dd { margin: 3px 0 0; font-size: clamp(17px, 2.4vw, 23px); font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.analytics-money { color: #315c4b; font-size: 26px; }
+.analytics-tabs { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px; border-radius: 9px; background: #f1f5f2; }
+.analytics-tabs button { border: 0; background: transparent; color: #516b5c; border-radius: 7px; padding: 6px 9px; font: inherit; font-size: 12px; cursor: pointer; }
+.analytics-tabs button[aria-pressed="true"] { background: white; color: #244536; box-shadow: 0 1px 3px #23413229; font-weight: 700; }
+.analytics-selection { color: #315c4b; font-size: 13px; min-height: 20px; font-variant-numeric: tabular-nums; }
+.chart-scroll, .analytics-table-scroll { min-width: 0; overflow-x: auto; padding: 3px; }
+.activity-bars { display: grid; gap: clamp(2px, .8vw, 8px); }
+.activity-bars button { display: grid; grid-template-rows: 132px auto; gap: 6px; min-width: 0; border: 0; padding: 0; color: #596d62; background: transparent; cursor: pointer; }
+.chart-bar-area { display: flex; align-items: end; justify-content: center; border-bottom: 1px solid #dce8df; background: repeating-linear-gradient(to top, transparent 0, transparent calc(25% - 1px), #edf2ee calc(25% - 1px), #edf2ee 25%); }
+.chart-bar-area i { width: min(72%, 34px); display: block; background: #6fa889; border-radius: 5px 5px 0 0; }
+.chart-bar-area i[data-empty="true"] { min-height: 2px; background: #dce8df; }
+.activity-bars button[aria-pressed="true"] i { background: #315c4b; }
+.chart-tick { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.activity-calendar { display: grid; grid-template-rows: 18px repeat(7, auto); gap: 3px; min-width: 760px; max-width: 1040px; }
+.calendar-month, .calendar-weekday { color: #66746e; font-size: 10px; white-space: nowrap; }
+.calendar-day, .calendar-legend i { background: #edf0ee; border: 0; border-radius: 3px; }
+.calendar-day { width: 100%; padding: 0; aspect-ratio: 1; cursor: pointer; }
+.calendar-day[aria-pressed="true"] { outline: 1px solid #315c4b; outline-offset: 1px; }
+.calendar-day[data-level="1"], .calendar-legend i[data-level="1"] { background: #cde6d4; }
+.calendar-day[data-level="2"], .calendar-legend i[data-level="2"] { background: #98c7a6; }
+.calendar-day[data-level="3"], .calendar-legend i[data-level="3"] { background: #619f77; }
+.calendar-day[data-level="4"], .calendar-legend i[data-level="4"] { background: #315c4b; }
+.calendar-footer { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.calendar-legend { display: inline-flex; gap: 4px; align-items: center; font-size: 11px; color: #66746e; }
+.calendar-legend i { width: 10px; height: 10px; }
+.analytics-directory-filter { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(180px, 250px); gap: 12px; margin-bottom: 14px; }
+.analytics-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+.analytics-table th, .analytics-table td { padding: 10px 8px; border-bottom: 1px solid #e7eee9; vertical-align: middle; }
+.analytics-table th { color: #536b5d; font-size: 12px; white-space: nowrap; }
+.analytics-table td:last-child { overflow-wrap: anywhere; }
+.analytics-name { border: 0; background: transparent; color: #315c4b; font: inherit; font-weight: 700; cursor: pointer; text-align: left; padding: 4px 0; }
+.analytics-form { display: grid; gap: 10px; margin: 12px 0; }
+.analytics-form p { margin: 0; }
+.analytics-form .field { max-width: 100%; }
+.analytics-form > .button { justify-self: start; }
+.analytics-leaderboard-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 8px 12px; margin-bottom: 12px; }
+.analytics-leaderboard-controls > .analytics-meta { align-self: end; padding-bottom: 7px; }
+.leaderboard-table th[scope="row"] { font-size: 13px; color: #253a31; white-space: normal; overflow-wrap: anywhere; }
+.leaderboard-table .leaderboard-day { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.analytics-panel .leaderboard-note { margin: 12px 0 0; }
+@media (max-width: 640px) {
+  .analytics-directory-filter, .analytics-form .form-grid { grid-template-columns: minmax(0, 1fr); }
+  .activity-calendar { min-width: 1460px; }
+  .analytics-table { min-width: 440px; }
+}

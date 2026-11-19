@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { Building2, Mail, Phone, Send } from 'lucide-react'
-import { getErrorMessage, withTimeout } from '../lib/errors'
+import { Building2, Phone, Send } from 'lucide-react'
+import { useAnalytics } from '../hooks/useAnalytics'
+import { TeamActivityPanel } from './TeamActivityPanel'
 
 const leadMetrics = [
   { key: 'total', label: 'Всего', icon: Building2 },
   { key: 'mailing', label: 'Рассылка', icon: Send },
   { key: 'calls_queue', label: 'Звонки', icon: Phone },
-  { key: 'messaged', label: 'Лиды, которым написали', icon: Mail },
 ] as const
 const activityMetrics = [
   { key: 'offers', label: 'Отправлено офферов', icon: Send },
@@ -15,52 +15,34 @@ const activityMetrics = [
 ] as const
 type Metric = (typeof leadMetrics | typeof activityMetrics)[number]
 type Statistics = Record<Metric['key'], number>
-const manualMessagedCount = 39
 
-export function StatisticsPage({ client, workspaceId, totalLeads }: {
-  client: SupabaseClient; workspaceId: string; totalLeads: number | null
+export function StatisticsPage({ client, workspaceId, totalLeads, revision, admin }: {
+  client: SupabaseClient; workspaceId: string; totalLeads: number | null; revision: number; admin: boolean
 }) {
-  const [data, setData] = useState<Statistics | null>(null)
-  const [error, setError] = useState('')
-  const [retry, setRetry] = useState(0)
+  const [salesRevision, setSalesRevision] = useState(0)
+  const { data, error, refresh } = useAnalytics<Statistics>(client, 'crm_sales_statistics',
+    { p_workspace_id: workspaceId }, revision + salesRevision)
 
   useEffect(() => {
-    let active = true
-    let request = 0
-    const refresh = async () => {
-      const current = ++request
-      try {
-        const { data: result, error: failure } = await withTimeout(client.rpc('crm_sales_statistics', { p_workspace_id: workspaceId }))
-        if (failure) throw failure
-        if (active && current === request) { setData(result as Statistics); setError('') }
-      } catch (failure) {
-        if (active && current === request) setError(getErrorMessage(failure))
-      }
-    }
-    void refresh()
+    const changed = () => setSalesRevision((value) => value + 1)
     const channel = client.channel(`sales-statistics:${workspaceId}`)
-    for (const table of ['leads', 'lead_calls', 'lead_outreach']) {
-      channel.on('postgres_changes', { event: '*', schema: 'public', table, filter: `workspace_id=eq.${workspaceId}` }, () => void refresh())
+    for (const table of ['leads', 'lead_calls']) {
+      channel.on('postgres_changes', { event: '*', schema: 'public', table, filter: `workspace_id=eq.${workspaceId}` }, changed)
     }
-    channel.subscribe((state) => { if (state === 'SUBSCRIBED') void refresh() })
-    const interval = window.setInterval(() => void refresh(), 60_000)
-    const onVisible = () => { if (document.visibilityState === 'visible') void refresh() }
-    document.addEventListener('visibilitychange', onVisible)
+    channel.subscribe((state) => { if (state === 'SUBSCRIBED') changed() })
     return () => {
-      active = false
-      window.clearInterval(interval)
-      document.removeEventListener('visibilitychange', onVisible)
       void client.removeChannel(channel)
     }
-  }, [client, workspaceId, retry])
+  }, [client, workspaceId])
 
   return <div className="page statistics-page">
     <div className="page-heading"><div><h1>Статистика</h1><p>Лиды и результаты продаж вашей команды</p></div></div>
-    {error && <div className="error-box" role="alert">{error} <button className="button text" onClick={() => setRetry((value) => value + 1)}>Обновить</button></div>}
+    {error && <div className="error-box" role="alert">{error} <button className="button text" onClick={refresh}>Обновить</button></div>}
     <section aria-labelledby="lead-metrics"><h2 id="lead-metrics">Лиды</h2>
-      <Metrics cards={leadMetrics} data={{ ...data, total: totalLeads ?? undefined, messaged: manualMessagedCount }} />
-      <p className="storage-note">«Всего» включает архивные карточки. «Лиды, которым написали» — ручное значение.</p>
+      <Metrics cards={leadMetrics} data={{ ...data, total: totalLeads ?? undefined }} />
+      <p className="storage-note">«Всего» включает архивные карточки.</p>
     </section>
+    <TeamActivityPanel client={client} workspaceId={workspaceId} revision={revision} admin={admin} />
     <section aria-labelledby="activity-metrics"><h2 id="activity-metrics">Действия</h2>
       <Metrics cards={activityMetrics} data={data} />
       <p className="storage-note">Офферы учитываются по отметкам об отправке. В звонки входят попытки дозвона с указанным результатом.</p>
