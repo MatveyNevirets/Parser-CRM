@@ -1,81 +1,85 @@
 import { useState, type FormEvent } from 'react'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { Database, KeyRound, Leaf, LogOut, UsersRound } from 'lucide-react'
-import { getErrorMessage, withTimeout } from '../lib/errors'
-import { validateSettings, type ConnectionSettings } from '../lib/supabase'
+import { AuthApiError, type SupabaseClient } from '@supabase/supabase-js'
+import { KeyRound, Leaf, LogOut, UsersRound } from 'lucide-react'
+import { withTimeout } from '../lib/errors'
 
-interface ConnectionProps { onConnect: (settings: ConnectionSettings) => void }
-
-export function ConnectionScreen({ onConnect }: ConnectionProps) {
-  const [url, setUrl] = useState('')
-  const [key, setKey] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const submit = (event: FormEvent) => {
-    event.preventDefault()
-    const settings = { url: url.trim().replace(/\/$/, ''), key: key.trim() }
-    const validation = validateSettings(settings)
-    if (validation) { setError(validation); return }
-    onConnect(settings)
-  }
-  return <AuthLayout icon={<Database />} title="Подключение Pahota CRM"
-    subtitle="Один проект Supabase для всей команды. Параметры сохранятся в этом браузере.">
-    <form onSubmit={submit} className="auth-form">
-      <Field label="Project URL" value={url} onChange={setUrl} placeholder="https://abc.supabase.co" />
-      <Field label="Publishable / anon key" value={key} onChange={setKey} secret />
-      {error && <ErrorBox text={error} />}
-      <button className="button primary" type="submit">Сохранить и продолжить</button>
-      <p className="form-note">Перед подключением выполните SQL-миграцию из README. Secret и service_role ключи сюда вводить нельзя.</p>
-    </form>
-  </AuthLayout>
-}
-
-export function LoginScreen({ client, initialError, onReset }: {
-  client: SupabaseClient; initialError: string | null; onReset: () => void
+export function LoginScreen({ client, initialError }: {
+  client: SupabaseClient; initialError?: string
 }) {
-  const [email, setEmail] = useState(() => localStorage.getItem('pahota.email') ?? '')
+  const [email, setEmail] = useState(() => {
+    try { return localStorage.getItem('pahota.email') ?? '' }
+    catch { return '' }
+  })
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(initialError)
+  const [error, setError] = useState<string | null>(initialError ?? null)
   const submit = async (event: FormEvent) => {
-    event.preventDefault(); setBusy(true); setError(null)
+    event.preventDefault()
+    const login = email.trim()
+    setBusy(true); setError(null)
     try {
-      const { error: authError } = await withTimeout(client.auth.signInWithPassword({ email: email.trim(), password }))
+      const { error: authError } = await withTimeout(client.auth.signInWithPassword({ email: login, password }))
       if (authError) throw authError
-      localStorage.setItem('pahota.email', email.trim())
       setPassword('')
-    } catch (caught) { setError(getErrorMessage(caught)) }
+      try { localStorage.setItem('pahota.email', login) }
+      catch { /* Remembering the login is optional. */ }
+    } catch (caught) {
+      if (caught instanceof AuthApiError && caught.code === 'invalid_credentials') {
+        setError('Неверный email или пароль.')
+      } else if (caught instanceof AuthApiError && caught.code === 'email_not_confirmed') {
+        setError('Подтвердите email, чтобы войти.')
+      } else {
+        setError('Не удалось войти. Попробуйте ещё раз или обратитесь к администратору.')
+      }
+    }
     finally { setBusy(false) }
   }
   return <AuthLayout icon={<KeyRound />} title="Вход в Pahota CRM"
-    subtitle="Используйте личный аккаунт CRM, созданный в Supabase Authentication → Users.">
+    subtitle="Введите email и пароль своего аккаунта CRM.">
     <form onSubmit={submit} className="auth-form">
-      <Field label="Email" value={email} onChange={setEmail} type="email" disabled={busy} />
-      <Field label="Пароль" value={password} onChange={setPassword} secret disabled={busy} />
+      <Field label="Логин (email)" value={email} onChange={setEmail} type="email" autoComplete="username"
+        required disabled={busy} />
+      <Field label="Пароль" value={password} onChange={setPassword} type="password" autoComplete="current-password"
+        required disabled={busy} />
       {error && <ErrorBox text={error} />}
-      <button className="button primary" disabled={busy}>{busy ? 'Входим…' : 'Войти'}</button>
-      <p className="form-note">Вход сохранится на этом устройстве. Пароль от панели Supabase здесь не используется.</p>
-      <button className="button text" type="button" disabled={busy} onClick={onReset}>Изменить подключение к Supabase</button>
+      <button className="button primary" type="submit" disabled={busy}>{busy ? 'Входим…' : 'Войти'}</button>
     </form>
   </AuthLayout>
 }
 
-export function WorkspaceScreen({ client, email, initialError, onReady, onSignOut }: {
-  client: SupabaseClient; email: string; initialError: string | null
+export function WorkspaceErrorScreen({ onRetry, onSignOut }: {
+  onRetry: () => void; onSignOut: () => void
+}) {
+  return <AuthLayout icon={<UsersRound />} title="Не удалось загрузить команду"
+    subtitle="Вы вошли в CRM. Попробуйте загрузить команду ещё раз.">
+    <div className="auth-form">
+      <button className="button primary" onClick={onRetry}>Повторить</button>
+      <button className="button text danger-text" onClick={onSignOut}><LogOut size={16} /> Выйти</button>
+    </div>
+  </AuthLayout>
+}
+
+export function WorkspaceScreen({ client, email, onReady, onSignOut }: {
+  client: SupabaseClient; email: string
   onReady: () => void; onSignOut: () => void
 }) {
   const [name, setName] = useState('Наша команда')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(initialError)
+  const [error, setError] = useState<string | null>(null)
   const perform = async (mode: 'create' | 'join') => {
     setBusy(true); setError(null)
+    const fallback = mode === 'create' ? 'Не удалось создать команду.' : 'Не удалось присоединиться к команде.'
     try {
       const { error: rpcError } = mode === 'create'
         ? await withTimeout(client.rpc('create_workspace', { team_name: name.trim() }))
         : await withTimeout(client.rpc('join_workspace', { invite: code.trim().toLowerCase() }))
-      if (rpcError) throw rpcError
+      if (rpcError) {
+        setError(rpcError.code === 'P0001' ? rpcError.message : fallback)
+        return
+      }
       onReady()
-    } catch (caught) { setError(getErrorMessage(caught)) }
+    } catch { setError(fallback) }
     finally { setBusy(false) }
   }
   return <AuthLayout icon={<UsersRound />} title="Ваша команда"
@@ -102,12 +106,12 @@ function AuthLayout({ icon, title, subtitle, children }: {
   </section></main>
 }
 
-function Field({ label, value, onChange, placeholder, secret, disabled, type }: {
-  label: string; value: string; onChange: (value: string) => void; placeholder?: string
-  secret?: boolean; disabled?: boolean; type?: string
+function Field({ label, value, onChange, disabled, type = 'text', autoComplete, required }: {
+  label: string; value: string; onChange: (value: string) => void
+  disabled?: boolean; type?: string; autoComplete?: string; required?: boolean
 }) {
-  return <label className="field"><span>{label}</span><input value={value} placeholder={placeholder}
-    disabled={disabled} type={secret ? 'password' : type ?? 'text'} autoComplete={secret ? 'current-password' : undefined}
+  return <label className="field"><span>{label}</span><input value={value}
+    disabled={disabled} type={type} autoComplete={autoComplete} required={required}
     onChange={(event) => onChange(event.target.value)} /></label>
 }
 

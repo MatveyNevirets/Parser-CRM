@@ -80,12 +80,38 @@ const analytics = (messages, payments) => ({
 })
 const recordings = new Map()
 const counts = { workspace: 0, leads: 0, writes: 0 }
+const testPassword = 'regression-test-password'
+const unavailablePassword = 'simulate-auth-outage'
+let passwordAttempts = 0
+let failNextWorkspaceLoad = false
 await context.route('https://crm-regression.supabase.co/**', async (route) => {
   const request = route.request()
   const url = new URL(request.url())
   let body
-  if (url.pathname.endsWith('/workspace_members')) {
+  if (url.pathname.endsWith('/token') && url.searchParams.get('grant_type') === 'password') {
+    const credentials = request.postDataJSON()
+    assert.equal(credentials.email, session.user.email)
+    passwordAttempts++
+    if (credentials.password === unavailablePassword) {
+      await route.fulfill({ status: 503, json: { message: 'Auth service unavailable at https://crm-regression.supabase.co' } })
+      return
+    }
+    if (credentials.password !== testPassword) {
+      await route.fulfill({
+        status: 400,
+        headers: { 'x-supabase-api-version': '2024-01-01', 'access-control-expose-headers': 'x-supabase-api-version' },
+        json: { code: 'invalid_credentials', message: 'Invalid login credentials' },
+      })
+      return
+    }
+    body = session
+  } else if (url.pathname.endsWith('/workspace_members')) {
     counts.workspace++
+    if (failNextWorkspaceLoad) {
+      failNextWorkspaceLoad = false
+      await route.fulfill({ status: 500, json: { code: 'XX000', message: 'Temporary workspace failure' } })
+      return
+    }
     // Make the original unmount visible and deterministic.
     await new Promise((resolve) => setTimeout(resolve, 80))
     body = { workspace_id: workspaceId }
@@ -215,7 +241,7 @@ await context.routeWebSocket('wss://crm-regression.supabase.co/**', (socket) => 
   })
 })
 await context.addInitScript(({ session }) => {
-  if (!localStorage.getItem('sb-crm-regression-auth-token')) {
+  if (!sessionStorage.getItem('skip-test-session') && !localStorage.getItem('sb-crm-regression-auth-token')) {
     localStorage.setItem('sb-crm-regression-auth-token', JSON.stringify(session))
   }
 }, { session })
@@ -458,6 +484,11 @@ async function salesWorkflows() {
 }
 
 async function employeeAnalytics() {
+  const connectionButton = page.getByRole('button', { name: 'Подключение к Supabase', exact: true })
+  await connectionButton.click()
+  const connection = page.getByRole('dialog', { name: 'Подключение к Supabase' })
+  assert.equal(await connection.getByLabel('Project URL').inputValue(), 'https://crm-regression.supabase.co')
+  await connection.getByRole('button', { name: 'Закрыть' }).click()
   await page.getByRole('button', { name: 'Личный кабинет' }).click()
   await page.getByRole('heading', { name: session.user.email }).waitFor()
   assert.equal(await page.getByRole('button', { name: 'Изменить статистику' }).count(), 0)
@@ -531,6 +562,11 @@ async function employeeAnalytics() {
   await page.getByRole('button', { name: 'Личный кабинет' }).click()
   await page.getByRole('heading', { name: session.user.email }).waitFor()
   assert.equal(await page.getByRole('button', { name: 'Пользователи', exact: true }).count(), 0)
+  assert.equal(await connectionButton.count(), 0)
+  await page.getByRole('button', { name: 'Команда и код приглашения' }).click()
+  const invite = page.getByRole('dialog', { name: 'Regression Team' })
+  assert.doesNotMatch(await invite.innerText(), /Supabase|Project URL|публичный ключ/i)
+  await invite.getByRole('button', { name: 'Закрыть' }).click()
   assert.equal(await page.getByRole('button', { name: 'Добавить начисление' }).count(), 0)
   assert.equal(await page.getByRole('button', { name: 'Изменить статистику' }).count(), 0)
   await page.getByRole('button', { name: 'Статистика', exact: true }).click()
@@ -648,7 +684,33 @@ try {
     assert.equal(await page.getByRole('heading', { name: 'Обзор', exact: true }).count(), 1)
     if (!headed) { await salesWorkflows(); await employeeAnalytics() }
     await page.getByTitle('Выйти', { exact: true }).click()
-    await page.getByRole('button', { name: 'Войти', exact: true }).waitFor()
+    const signIn = page.getByRole('button', { name: 'Войти', exact: true })
+    await signIn.waitFor()
+    await page.evaluate(() => sessionStorage.setItem('skip-test-session', '1'))
+    await page.reload()
+    await page.getByRole('heading', { name: 'Вход в Pahota CRM', exact: true }).waitFor()
+    assert.equal(await page.locator('input').count(), 2)
+    assert.equal(await page.getByRole('button').count(), 1)
+    assert.doesNotMatch(await page.locator('main').innerText(), /Supabase|Project URL/i)
+    await page.getByLabel('Логин (email)', { exact: true }).fill(session.user.email)
+    const password = page.getByLabel('Пароль', { exact: true })
+    await password.fill('wrong-password')
+    await signIn.click()
+    assert.equal(await page.getByRole('alert').innerText(), 'Неверный email или пароль.')
+    await password.fill(unavailablePassword)
+    await signIn.click()
+    await page.getByRole('alert').filter({ hasText: 'Не удалось войти. Попробуйте ещё раз или обратитесь к администратору.' }).waitFor()
+    failNextWorkspaceLoad = true
+    await password.fill(testPassword)
+    await signIn.click()
+    await page.getByRole('heading', { name: 'Не удалось загрузить команду' }).waitFor()
+    assert.equal(await page.getByRole('button', { name: 'Создать команду' }).count(), 0)
+    await page.getByRole('button', { name: 'Повторить', exact: true }).click()
+    await page.getByTitle('Выйти', { exact: true }).waitFor()
+    await page.reload()
+    await page.getByTitle('Выйти', { exact: true }).waitFor()
+    assert.equal(passwordAttempts, 3)
+    console.log('PASS: password sign-in, invalid credentials, workspace retry, session persistence')
     console.log('PASS: filters, offer PATCH/reload/details, draft/card/section preservation, token refresh, sign-out')
   }
   assert.deepEqual(errors, [])

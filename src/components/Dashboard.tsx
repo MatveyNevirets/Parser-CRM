@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { Archive, BarChart3, BriefcaseBusiness, Building2, CircleGauge, Cloud, Copy, Leaf, LogOut, Map, Menu, UserRound, UsersRound, X } from 'lucide-react'
+import { Archive, BarChart3, BriefcaseBusiness, Building2, CircleGauge, Cloud, Copy, Database, Leaf, LogOut, Map, Menu, UserRound, UsersRound, X } from 'lucide-react'
 import type { Workspace } from '../types'
+import type { ConnectionSettings } from '../lib/supabase'
 import { useLeads } from '../hooks/useLeads'
 import { LeadsPage } from './LeadsPage'
 import { ParserPage } from './ParserPage'
@@ -12,11 +13,15 @@ import { useActivityRevision } from '../hooks/useAnalytics'
 
 type Section = 'overview' | 'leads' | 'parser' | 'statistics' | 'archive' | 'employee' | 'members'
 
-export function Dashboard({ client, workspace, email, userId, onSignOut }: {
-  client: SupabaseClient; workspace: Workspace; email: string; userId: string; onSignOut: () => void
+type ConnectionDetails = Pick<ConnectionSettings, 'url' | 'configurationError'>
+
+export function Dashboard({ client, workspace, email, userId, connection, onSignOut }: {
+  client: SupabaseClient; workspace: Workspace; email: string; userId: string
+  connection: ConnectionDetails; onSignOut: () => void
 }) {
   const [section, setSection] = useState<Section>('leads')
   const [teamOpen, setTeamOpen] = useState(false)
+  const [connectionOpen, setConnectionOpen] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
   const leadsState = useLeads(client, workspace.id)
   const revision = useActivityRevision(client, workspace.id)
@@ -49,6 +54,7 @@ export function Dashboard({ client, workspace, email, userId, onSignOut }: {
         <strong className="team-title">{workspace.name}</strong>
         <div className="top-actions">
           <button className="icon-button" title="Команда и код приглашения" onClick={() => setTeamOpen(true)}><UsersRound /></button>
+          {admin && <button className="icon-button" title="Подключение к Supabase" onClick={() => setConnectionOpen(true)}><Database /></button>}
           <button className="icon-button" title="Выйти" onClick={onSignOut}><LogOut /></button>
           <div className="avatar">{email.slice(0, 1).toUpperCase()}</div>
         </div>
@@ -68,6 +74,7 @@ export function Dashboard({ client, workspace, email, userId, onSignOut }: {
       </main>
     </div>
     {teamOpen && <TeamDialog workspace={workspace} email={email} onClose={() => setTeamOpen(false)} />}
+    {admin && connectionOpen && <ConnectionDialog details={connection} onClose={() => setConnectionOpen(false)} />}
   </div>
 }
 
@@ -99,10 +106,24 @@ function TeamDialog({ workspace, email, onClose }: { workspace: Workspace; email
     <section className="modal small-modal" role="dialog" aria-modal="true" aria-labelledby="team-title">
       <button className="modal-close" aria-label="Закрыть" onClick={onClose}><X /></button>
       <div className="modal-icon"><UsersRound /></div><h2 id="team-title">{workspace.name}</h2><p className="muted">{email}</p>
-      <p>Передайте другу URL, публичный ключ проекта и этот код. Он входит со своим аккаунтом CRM и выбирает «Присоединиться».</p>
+      <p>Отправьте сотруднику ссылку на CRM и код приглашения. После входа под своим аккаунтом он вводит код и нажимает «Присоединиться».</p>
       <div className="invite-code"><code>{workspace.invite_code}</code><button className="icon-button" title="Копировать" onClick={() => void copy()}><Copy /></button></div>
       <p className="form-note">Код даёт доступ к данным команды — не публикуйте его.</p>
       <button className="button primary" onClick={() => void copy()}>{copied ? 'Скопировано' : 'Копировать код'}</button>
+    </section>
+  </div>
+}
+
+function ConnectionDialog({ details, onClose }: { details: ConnectionDetails; onClose: () => void }) {
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <section className="modal small-modal" role="dialog" aria-modal="true" aria-labelledby="connection-title">
+      <button className="modal-close" aria-label="Закрыть" onClick={onClose}><X /></button>
+      <div className="modal-icon"><Database /></div><h2 id="connection-title">Подключение к Supabase</h2>
+      <label className="field"><span>Project URL</span><input type="url" value={details.url} readOnly /></label>
+      {details.configurationError && <p className="error-box" role="alert">
+        Приложение использует проект по умолчанию. {details.configurationError}
+      </p>}
+      <p>Параметры меняются в настройках сборки Netlify или в локальном файле <code>.env</code>.</p>
     </section>
   </div>
 }
